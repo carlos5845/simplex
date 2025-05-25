@@ -1,172 +1,332 @@
 #include <iostream>
-#include <iomanip>
 #include <vector>
-#include <string>
+#include <iomanip>
+#include <algorithm>
+#include <cmath>
 
 using namespace std;
 
-const int MAX = 10;
-
-int numVariables = 2;     // Número de variables reales
-int numRestricciones = 2; // Número de restricciones
-
-// Tabla del método simplex
-double tabla[MAX][MAX];
-int variablesBasicas[MAX]; // Índices de variables básicas
-
-void mostrarTabla()
+class SimplexMaximization
 {
-    cout << fixed << setprecision(2);
-    cout << "\nTabla Simplex:\n";
-    cout << "VB\t";
-    for (int j = 0; j < numVariables + numRestricciones; j++)
-        cout << "x" << j + 1 << "\t";
-    cout << "LD\n";
+private:
+    vector<vector<double>> tabla;
+    vector<string> variables_base;
+    vector<string> variables_no_base;
+    int num_variables;
+    int num_restricciones;
 
-    for (int i = 0; i <= numRestricciones; i++)
+public:
+    SimplexMaximization(int vars, int restricciones)
+        : num_variables(vars), num_restricciones(restricciones)
     {
-        if (i < numRestricciones)
-            cout << "x" << variablesBasicas[i] + 1 << "\t";
-        else
-            cout << "Z\t";
-        for (int j = 0; j <= numVariables + numRestricciones; j++)
-            cout << tabla[i][j] << "\t";
-        cout << endl;
-    }
-}
+        // Inicializar tabla simplex
+        // Filas: restricciones + fila Z
+        // Columnas: variables originales + variables de holgura + RHS
+        tabla.resize(restricciones + 1, vector<double>(vars + restricciones + 1, 0));
 
-int encontrarColumnaPivote()
-{
-    int columna = -1;
-    double minimo = 0;
-    for (int j = 0; j < numVariables + numRestricciones; j++)
-    {
-        if (tabla[numRestricciones][j] < minimo)
+        // Inicializar nombres de variables
+        for (int i = 0; i < vars; i++)
         {
-            minimo = tabla[numRestricciones][j];
-            columna = j;
+            variables_no_base.push_back("x" + to_string(i + 1));
+        }
+        for (int i = 0; i < restricciones; i++)
+        {
+            variables_base.push_back("s" + to_string(i + 1));
         }
     }
-    return columna;
-}
 
-int encontrarFilaPivote(int columna)
-{
-    int fila = -1;
-    double menorRazon = 1e9;
-    for (int i = 0; i < numRestricciones; i++)
+    void ingresarFuncionObjetivo()
     {
-        if (tabla[i][columna] > 0)
+        cout << "\n=== INGRESO DE FUNCIÓN OBJETIVO ===" << endl;
+        cout << "Ingrese los coeficientes de la función objetivo a MAXIMIZAR:" << endl;
+
+        for (int j = 0; j < num_variables; j++)
         {
-            double razon = tabla[i][numVariables + numRestricciones] / tabla[i][columna];
-            if (razon < menorRazon)
+            cout << "Coeficiente de x" << (j + 1) << ": ";
+            cin >> tabla[num_restricciones][j];
+            // En simplex para maximización, los coeficientes van negativos en la fila Z
+            tabla[num_restricciones][j] = -tabla[num_restricciones][j];
+        }
+    }
+
+    void ingresarRestricciones()
+    {
+        cout << "\n=== INGRESO DE RESTRICCIONES ===" << endl;
+        cout << "Ingrese las restricciones en la forma: ax1 + bx2 + ... <= c" << endl;
+
+        for (int i = 0; i < num_restricciones; i++)
+        {
+            cout << "\nRestricción " << (i + 1) << ":" << endl;
+
+            // Coeficientes de las variables originales
+            for (int j = 0; j < num_variables; j++)
             {
-                menorRazon = razon;
-                fila = i;
+                cout << "Coeficiente de x" << (j + 1) << ": ";
+                cin >> tabla[i][j];
+            }
+
+            // Variable de holgura (coeficiente = 1 en su propia restricción)
+            tabla[i][num_variables + i] = 1;
+
+            // Lado derecho de la restricción
+            cout << "Valor del lado derecho (<=): ";
+            cin >> tabla[i][num_variables + num_restricciones];
+        }
+    }
+
+    void mostrarTabla()
+    {
+        cout << "\n=== TABLA SIMPLEX ===" << endl;
+
+        // Encabezados
+        cout << setw(8) << "Base";
+        for (int j = 0; j < num_variables; j++)
+        {
+            cout << setw(10) << ("x" + to_string(j + 1));
+        }
+        for (int j = 0; j < num_restricciones; j++)
+        {
+            cout << setw(10) << ("s" + to_string(j + 1));
+        }
+        cout << setw(10) << "RHS" << endl;
+
+        cout << string(80, '-') << endl;
+
+        // Filas de restricciones
+        for (int i = 0; i < num_restricciones; i++)
+        {
+            cout << setw(8) << variables_base[i];
+            for (int j = 0; j < num_variables + num_restricciones + 1; j++)
+            {
+                cout << setw(10) << fixed << setprecision(2) << tabla[i][j];
+            }
+            cout << endl;
+        }
+
+        // Fila Z
+        cout << setw(8) << "Z";
+        for (int j = 0; j < num_variables + num_restricciones + 1; j++)
+        {
+            cout << setw(10) << fixed << setprecision(2) << tabla[num_restricciones][j];
+        }
+        cout << endl
+             << endl;
+    }
+
+    int encontrarColumnaEntrante()
+    {
+        int col = -1;
+        double min_valor = 0;
+
+        // Buscar el coeficiente más negativo en la fila Z (excluyendo RHS)
+        for (int j = 0; j < num_variables + num_restricciones; j++)
+        {
+            if (tabla[num_restricciones][j] < min_valor)
+            {
+                min_valor = tabla[num_restricciones][j];
+                col = j;
             }
         }
+
+        return col;
     }
-    return fila;
-}
 
-void realizarPivoteo(int fila, int columna)
-{
-    double elementoPivote = tabla[fila][columna];
-    for (int j = 0; j <= numVariables + numRestricciones; j++)
-        tabla[fila][j] /= elementoPivote;
-
-    for (int i = 0; i <= numRestricciones; i++)
+    int encontrarFilaSaliente(int col_entrante)
     {
-        if (i != fila)
+        int fila = -1;
+        double min_ratio = 1e9;
+
+        for (int i = 0; i < num_restricciones; i++)
         {
-            double factor = tabla[i][columna];
-            for (int j = 0; j <= numVariables + numRestricciones; j++)
-                tabla[i][j] -= factor * tabla[fila][j];
+            if (tabla[i][col_entrante] > 0)
+            {
+                double ratio = tabla[i][num_variables + num_restricciones] / tabla[i][col_entrante];
+                if (ratio >= 0 && ratio < min_ratio)
+                {
+                    min_ratio = ratio;
+                    fila = i;
+                }
+            }
+        }
+
+        return fila;
+    }
+
+    void pivotear(int fila_pivot, int col_pivot)
+    {
+        double pivot = tabla[fila_pivot][col_pivot];
+
+        // Normalizar fila pivot
+        for (int j = 0; j <= num_variables + num_restricciones; j++)
+        {
+            tabla[fila_pivot][j] /= pivot;
+        }
+
+        // Eliminar en otras filas
+        for (int i = 0; i <= num_restricciones; i++)
+        {
+            if (i != fila_pivot)
+            {
+                double factor = tabla[i][col_pivot];
+                for (int j = 0; j <= num_variables + num_restricciones; j++)
+                {
+                    tabla[i][j] -= factor * tabla[fila_pivot][j];
+                }
+            }
+        }
+
+        // Actualizar variable base
+        if (col_pivot < num_variables)
+        {
+            variables_base[fila_pivot] = "x" + to_string(col_pivot + 1);
+        }
+        else
+        {
+            variables_base[fila_pivot] = "s" + to_string(col_pivot - num_variables + 1);
         }
     }
 
-    variablesBasicas[fila] = columna;
-}
-
-void metodoSimplex()
-{
-    int iteracion = 1;
-    while (true)
+    bool esOptima()
     {
-        cout << "\n--- Iteración " << iteracion++ << " ---";
+        // Verificar si todos los coeficientes en la fila Z son >= 0
+        for (int j = 0; j < num_variables + num_restricciones; j++)
+        {
+            if (tabla[num_restricciones][j] < -1e-10)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void resolver()
+    {
+        cout << "\n=== RESOLUCIÓN POR MÉTODO SIMPLEX ===" << endl;
+
         mostrarTabla();
 
-        int columnaPivote = encontrarColumnaPivote();
-        if (columnaPivote == -1)
+        int iteracion = 1;
+
+        while (!esOptima())
         {
-            cout << "\nSe ha alcanzado la solución óptima.\n";
-            break;
+            cout << "ITERACIÓN " << iteracion << ":" << endl;
+
+            // Encontrar variable entrante
+            int col_entrante = encontrarColumnaEntrante();
+            if (col_entrante == -1)
+            {
+                cout << "Error: No se encontró variable entrante." << endl;
+                return;
+            }
+
+            string var_entrante;
+            if (col_entrante < num_variables)
+            {
+                var_entrante = "x" + to_string(col_entrante + 1);
+            }
+            else
+            {
+                var_entrante = "s" + to_string(col_entrante - num_variables + 1);
+            }
+
+            // Encontrar variable saliente
+            int fila_saliente = encontrarFilaSaliente(col_entrante);
+            if (fila_saliente == -1)
+            {
+                cout << "El problema es no acotado (solución infinita)." << endl;
+                return;
+            }
+
+            string var_saliente = variables_base[fila_saliente];
+
+            cout << "Variable entrante: " << var_entrante << " (columna " << col_entrante + 1 << ")" << endl;
+            cout << "Variable saliente: " << var_saliente << " (fila " << fila_saliente + 1 << ")" << endl;
+            cout << "Elemento pivot: " << tabla[fila_saliente][col_entrante] << endl;
+
+            // Pivotear
+            pivotear(fila_saliente, col_entrante);
+
+            cout << "\nTabla después del pivoteo:" << endl;
+            mostrarTabla();
+
+            iteracion++;
         }
 
-        int filaPivote = encontrarFilaPivote(columnaPivote);
-        if (filaPivote == -1)
-        {
-            cout << "La solución es ilimitada.\n";
-            return;
-        }
-
-        cout << "Variable entrante: x" << columnaPivote + 1
-             << ", Variable saliente: x" << variablesBasicas[filaPivote] + 1 << endl;
-
-        realizarPivoteo(filaPivote, columnaPivote);
+        cout << "¡SOLUCIÓN ÓPTIMA ENCONTRADA!" << endl;
+        mostrarSolucion();
     }
 
-    cout << "\nSolución óptima encontrada:\n";
-    for (int i = 0; i < numVariables; i++)
+    void mostrarSolucion()
     {
-        bool encontrada = false;
-        for (int j = 0; j < numRestricciones; j++)
+        cout << "\n=== SOLUCIÓN ÓPTIMA ===" << endl;
+
+        // Valor óptimo de la función objetivo
+        double valor_optimo = tabla[num_restricciones][num_variables + num_restricciones];
+        cout << "Valor máximo de Z = " << valor_optimo << endl;
+
+        cout << "\nValores de las variables:" << endl;
+
+        // Variables básicas
+        for (int i = 0; i < num_restricciones; i++)
         {
-            if (variablesBasicas[j] == i)
+            cout << variables_base[i] << " = "
+                 << tabla[i][num_variables + num_restricciones] << endl;
+        }
+
+        // Variables no básicas (valor = 0)
+        vector<string> todas_variables;
+        for (int i = 0; i < num_variables; i++)
+        {
+            todas_variables.push_back("x" + to_string(i + 1));
+        }
+        for (int i = 0; i < num_restricciones; i++)
+        {
+            todas_variables.push_back("s" + to_string(i + 1));
+        }
+
+        cout << "\nVariables no básicas (valor = 0):" << endl;
+        for (const string &var : todas_variables)
+        {
+            bool es_basica = false;
+            for (const string &var_base : variables_base)
             {
-                cout << "x" << i + 1 << " = " << tabla[j][numVariables + numRestricciones] << endl;
-                encontrada = true;
-                break;
+                if (var == var_base)
+                {
+                    es_basica = true;
+                    break;
+                }
+            }
+            if (!es_basica)
+            {
+                cout << var << " = 0" << endl;
             }
         }
-        if (!encontrada)
-            cout << "x" << i + 1 << " = 0" << endl;
     }
-    cout << "Valor óptimo de Z = " << tabla[numRestricciones][numVariables + numRestricciones] << endl;
-}
+};
 
 int main()
 {
-    // Problema de ejemplo:
-    // Max Z = 3x1 + 2x2
-    // sujeto a:
-    // x1 + x2       ≤ 4
-    // 2x1 + x2      ≤ 5
+    cout << "=== MÉTODO SIMPLEX PARA MAXIMIZACIÓN ===" << endl;
 
-    // Llenar la tabla con restricciones + variables de holgura
-    tabla[0][0] = 1;
-    tabla[0][1] = 1;
-    tabla[0][2] = 1;
-    tabla[0][3] = 0;
-    tabla[0][4] = 4;
-    tabla[1][0] = 2;
-    tabla[1][1] = 1;
-    tabla[1][2] = 0;
-    tabla[1][3] = 1;
-    tabla[1][4] = 5;
+    int num_variables, num_restricciones;
 
-    // Función objetivo (Z = -3x1 -2x2 + 0x3 + 0x4)
-    tabla[2][0] = -3;
-    tabla[2][1] = -2;
-    tabla[2][2] = 0;
-    tabla[2][3] = 0;
-    tabla[2][4] = 0;
+    cout << "\nIngrese el número de variables: ";
+    cin >> num_variables;
 
-    // Variables básicas iniciales (x3 y x4)
-    variablesBasicas[0] = 2;
-    variablesBasicas[1] = 3;
+    cout << "Ingrese el número de restricciones: ";
+    cin >> num_restricciones;
 
-    metodoSimplex();
+    SimplexMaximization simplex(num_variables, num_restricciones);
+
+    simplex.ingresarFuncionObjetivo();
+    simplex.ingresarRestricciones();
+
+    cout << "\n=== TABLA INICIAL ===" << endl;
+    simplex.mostrarTabla();
+
+    simplex.resolver();
+
+    cout << "\n¡Programa finalizado!" << endl;
 
     return 0;
 }
